@@ -6,6 +6,7 @@ import android.graphics.Bitmap
 import android.os.Build
 import android.os.Bundle
 import android.view.View
+import android.webkit.PermissionRequest
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -14,6 +15,7 @@ import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -45,6 +47,33 @@ private const val WEBSITE = "https://study.gyouke.com"
  */
 class MainActivity : ComponentActivity() {
 
+    // 保存网页发起的权限请求，等用户授权后回调
+    private var pendingWebPermissionRequest: PermissionRequest? = null
+
+    // 同时申请麦克风和相机权限
+    private val requestPermissions = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        val granted = results.entries
+            .filter { it.value }
+            .map { it.key }
+            .flatMap { androidPerm ->
+                when (androidPerm) {
+                    android.Manifest.permission.RECORD_AUDIO ->
+                        listOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE)
+                    android.Manifest.permission.CAMERA ->
+                        listOf(PermissionRequest.RESOURCE_VIDEO_CAPTURE)
+                    else -> emptyList()
+                }
+            }
+            .toTypedArray()
+
+        pendingWebPermissionRequest?.let { req ->
+            if (granted.isNotEmpty()) req.grant(granted) else req.deny()
+        }
+        pendingWebPermissionRequest = null
+    }
+
     /**
      * Called when the activity is first created.
      * Sets up the splash screen and the main content view.
@@ -61,7 +90,23 @@ class MainActivity : ComponentActivity() {
                         .safeDrawingPadding(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    MainScreen()
+                    MainScreen(
+                        onWebPermissionRequest = { request ->
+                            pendingWebPermissionRequest = request
+                            val androidPerms = mutableListOf<String>()
+                            if (request.resources.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) {
+                                androidPerms.add(android.Manifest.permission.RECORD_AUDIO)
+                            }
+                            if (request.resources.contains(PermissionRequest.RESOURCE_VIDEO_CAPTURE)) {
+                                androidPerms.add(android.Manifest.permission.CAMERA)
+                            }
+                            if (androidPerms.isNotEmpty()) {
+                                requestPermissions.launch(androidPerms.toTypedArray())
+                            } else {
+                                request.deny()
+                            }
+                        }
+                    )
                 }
             }
         }
@@ -75,7 +120,7 @@ class MainActivity : ComponentActivity() {
  */
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
-private fun MainScreen() {
+private fun MainScreen(onWebPermissionRequest: (PermissionRequest) -> Unit) {
     var progress by rememberSaveable { mutableIntStateOf(0) }
     var fullScreenView: View? by remember { mutableStateOf(null) }
 
@@ -85,9 +130,8 @@ private fun MainScreen() {
         WebViewWithRefresher(
             modifier = Modifier.fillMaxSize(),
             updateProgress = { currentProgress -> progress = currentProgress },
-            onViewReceived = {
-                fullScreenView = it
-            },
+            onViewReceived = { fullScreenView = it },
+            onWebPermissionRequest = onWebPermissionRequest,
         )
         ProgressIndicator(progress)
     }
@@ -121,50 +165,41 @@ private fun ProgressIndicator(progress: Int) {
  * @param modifier
  * @param updateProgress Callback to update the loading progress.
  * @param onViewReceived Callback invoked when a custom view (e.g., for full-screen video) is shown or hidden.
+ * @param onWebPermissionRequest Callback invoked when the webpage requests camera/mic permission.
  */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 private fun WebViewWithRefresher(
-    modifier: Modifier = Modifier, updateProgress: (Int) -> Unit, onViewReceived: (View?) -> Unit
+    modifier: Modifier = Modifier,
+    updateProgress: (Int) -> Unit,
+    onViewReceived: (View?) -> Unit,
+    onWebPermissionRequest: (PermissionRequest) -> Unit,
 ) {
     var webView: WebView? = null
-    val webViewId = View.generateViewId() // Unique ID for the WebView within SwipeRefreshLayout
+    val webViewId = View.generateViewId()
     var isBackEnabled by rememberSaveable { mutableStateOf(false) }
     val primaryColorArgb = MaterialTheme.colorScheme.primary.toArgb()
     val secondaryColorArgb = MaterialTheme.colorScheme.secondary.toArgb()
     val tertiaryColorArgb = MaterialTheme.colorScheme.tertiary.toArgb()
 
-    // Override back navigation to allow WebView to go back in its history
     BackHandler(enabled = isBackEnabled) {
         webView?.goBack()
     }
+
     AndroidView(modifier = modifier.fillMaxSize(), factory = { context ->
-        // Create SwipeRefreshLayout
         val swipeRefreshLayout = SwipeRefreshLayout(context).apply {
-            setColorSchemeColors(
-                primaryColorArgb, secondaryColorArgb, tertiaryColorArgb
-            )
-            setOnRefreshListener {
-                webView?.reload() // Reload WebView on swipe
-            }
+            setColorSchemeColors(primaryColorArgb, secondaryColorArgb, tertiaryColorArgb)
+            setOnRefreshListener { webView?.reload() }
         }
 
-        // Create and configure WebView
         webView = WebView(context).apply {
             id = webViewId
             webViewClient = object : WebViewClient() {
 
-                /**
-                 * Handles URL loading. Opens external links in a web browser,
-                 * internal links (starting with WEBSITE) are loaded in the WebView.
-                 */
                 override fun shouldOverrideUrlLoading(
                     view: WebView?, request: WebResourceRequest?
                 ): Boolean {
-                    if (request?.url.toString().startsWith(WEBSITE)) {
-                        return false // Load in WebView
-                    }
-                    // Open external links in a browser
+                    if (request?.url.toString().startsWith(WEBSITE)) return false
                     try {
                         Intent(Intent.ACTION_VIEW, request?.url).apply {
                             context.startActivity(this, null)
@@ -172,7 +207,7 @@ private fun WebViewWithRefresher(
                     } catch (e: Exception) {
                         if (BuildConfig.DEBUG) e.printStackTrace()
                     }
-                    return true // Indicate that the URL loading is handled
+                    return true
                 }
 
                 override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
@@ -186,13 +221,10 @@ private fun WebViewWithRefresher(
                     super.onReceivedError(view, request, error)
                     swipeRefreshLayout.isRefreshing = false
                 }
-
             }
+
             webChromeClient = object : WebChromeClient() {
 
-                /**
-                 * Reports the loading progress of the current page.
-                 */
                 override fun onProgressChanged(view: WebView?, newProgress: Int) {
                     super.onProgressChanged(view, newProgress)
                     updateProgress(newProgress)
@@ -209,26 +241,27 @@ private fun WebViewWithRefresher(
                     super.onHideCustomView()
                 }
 
+                // 网页请求麦克风或摄像头时，转交给 Activity 处理系统权限弹窗
+                override fun onPermissionRequest(request: PermissionRequest) {
+                    onWebPermissionRequest(request)
+                }
             }
-            // Configure WebView settings
+
             with(settings) {
                 domStorageEnabled = true
                 javaScriptEnabled = true
+                mediaPlaybackRequiresUserGesture = false  // 允许自动播放音频（语音对话需要）
                 setSupportZoom(false)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    isAlgorithmicDarkeningAllowed =
-                        true // Enable algorithmic dark mode on Android Tiramisu+
+                    isAlgorithmicDarkeningAllowed = true
                 }
             }
-            loadUrl(WEBSITE) // Load the initial website
+            loadUrl(WEBSITE)
         }
-        swipeRefreshLayout.addView(webView) // Add WebView to SwipeRefreshLayout
-        swipeRefreshLayout // Return SwipeRefreshLayout as the view for AndroidView
-    }, update = { swipeRefreshLayout ->
-        // Re-obtain the WebView instance during recomposition/update
-        // This is necessary because the factory lambda might not be re-executed
-        val view = swipeRefreshLayout.findViewById<WebView>(webViewId)
-        webView = view
-    })
 
+        swipeRefreshLayout.addView(webView)
+        swipeRefreshLayout
+    }, update = { swipeRefreshLayout ->
+        webView = swipeRefreshLayout.findViewById(webViewId)
+    })
 }
