@@ -1,4 +1,4 @@
-package com.roozbehzarei.superwebview
+package com.gyouke.study
 
 import android.annotation.SuppressLint
 import android.content.Intent
@@ -35,9 +35,9 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
-import com.roozbehzarei.superwebview.ui.theme.SuperWebViewTheme
+import com.gyouke.study.ui.theme.SuperWebViewTheme
 
-private const val WEBSITE = "https://www.yyjrb.com.cn"
+private const val WEBSITE = "https://study.gyouke.com"
 
 /**
  * Main activity of the application.

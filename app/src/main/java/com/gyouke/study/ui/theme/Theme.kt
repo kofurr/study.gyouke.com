@@ -1,4 +1,4 @@
-package com.roozbehzarei.superwebview.ui.theme
+package com.gyouke.study.ui.theme
 
 import android.app.Activity
 import android.os.Build

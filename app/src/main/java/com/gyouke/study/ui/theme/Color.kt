@@ -1,4 +1,4 @@
-package com.roozbehzarei.superwebview.ui.theme
+package com.gyouke.study.ui.theme
 import androidx.compose.ui.graphics.Color
 
 val primaryLight = Color(0xFF415F91)

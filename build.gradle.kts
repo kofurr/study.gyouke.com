@@ -4,11 +4,4 @@ plugins {
     alias(libs.plugins.compose.compiler) apply false
 }
 
-android {
-    // ... 其他配置 ...
 
-    lint {
-        abortOnError false   // Lint 有错误时不中断构建
-        checkReleaseBuilds false  // Release 构建时不跑 Lint
-    }
-}

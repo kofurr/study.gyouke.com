@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.roozbehzarei.superwebview"
+    namespace = "com.gyouke.study"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.roozbehzarei.superwebview"
+        applicationId = "com.gyouke.study"
         minSdk = 24
         targetSdk = 37
         versionCode = 1
