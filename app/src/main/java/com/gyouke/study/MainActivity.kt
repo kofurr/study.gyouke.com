@@ -6,6 +6,7 @@ import android.graphics.Bitmap
 import android.os.Build
 import android.os.Bundle
 import android.view.View
+import android.view.ViewGroup
 import android.webkit.PermissionRequest
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
@@ -20,7 +21,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -87,7 +89,8 @@ class MainActivity : ComponentActivity() {
                 Surface(
                     modifier = Modifier
                         .fillMaxSize()
-                        .safeDrawingPadding(),
+                        .systemBarsPadding()
+                        .imePadding(),
                     color = MaterialTheme.colorScheme.background
                 ) {
                     MainScreen(
@@ -194,6 +197,11 @@ private fun WebViewWithRefresher(
 
         webView = WebView(context).apply {
             id = webViewId
+            setLayerType(View.LAYER_TYPE_HARDWARE, null) // 硬件加速，修复画板触摸坐标偏移
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
             webViewClient = object : WebViewClient() {
 
                 override fun shouldOverrideUrlLoading(
